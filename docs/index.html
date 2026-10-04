@@ -7,10 +7,16 @@
 <meta name="description" content="Recordings of iron-kernel, an OS kernel written from scratch in Rust that runs unmodified Linux binaries, up to a real Kubernetes node.">
 <link rel="stylesheet" href="asciinema-player.css">
 <style>
-  :root { color-scheme: light dark; --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --line: #d1d9e0; --accent: #0969da; }
-  @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --line: #30363d; --accent: #58a6ff; } }
+  /* Light is the base; dark applies when the system asks for it and the
+     viewer has not chosen light, or when the viewer chose dark. */
+  :root { color-scheme: light; --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --line: #d1d9e0; --accent: #0969da; --btn: #f6f8fa; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { color-scheme: dark; --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --line: #30363d; --accent: #58a6ff; --btn: #161b22; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --line: #30363d; --accent: #58a6ff; --btn: #161b22; }
   html { background: var(--bg); color: var(--fg); }
-  body { margin: 0 auto; max-width: 1120px; padding: 24px 16px 64px; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0 auto; max-width: 1120px; padding: 24px 16px 64px; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; }
   h2 { font-size: 1.2rem; margin: 40px 0 8px; padding-top: 24px; border-top: 1px solid var(--line); }
   p { margin: 8px 0; max-width: 78ch; }
@@ -20,10 +26,15 @@
   .ap-wrapper { max-width: 100%; }
   code { font: 0.92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   nav a + a { margin-left: 16px; }
+  #theme { font: inherit; font-size: 0.9rem; color: var(--fg); background: var(--btn); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #theme:hover { border-color: var(--accent); }
 </style>
 </head>
 <body>
-<h1>iron-kernel demos</h1>
+<header>
+  <h1>iron-kernel demos</h1>
+  <button id="theme" type="button" aria-label="Switch between light and dark mode" title="Switch light / dark"></button>
+</header>
 <p class="muted">An OS kernel written from scratch in Rust that speaks the Linux ABI and runs
 unmodified Linux binaries. These are recordings of its serial console; the player is
 <a href="https://github.com/asciinema/asciinema-player">asciinema-player</a>, served from this
@@ -52,14 +63,58 @@ schedule are compressed by the 3 s idle cap. <a href="kubernetes.cast">kubernete
 
 <script src="asciinema-player.min.js"></script>
 <script>
-  AsciinemaPlayer.create('tour.cast', document.getElementById('tour-player'), {
-    cols: 100, rows: 36, idleTimeLimit: 2, theme: 'monokai', fit: 'width',
-    poster: 'npt:41', terminalFontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+(function () {
+  var root = document.documentElement;
+  var button = document.getElementById('theme');
+  var mono = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  var casts = [
+    { id: 'tour-player',       src: 'tour.cast',       cols: 100, rows: 36, idle: 2, poster: 'npt:41'  },
+    { id: 'kubernetes-player', src: 'kubernetes.cast', cols: 155, rows: 42, idle: 3, poster: 'npt:646' }
+  ];
+  var players = {};
+
+  // The viewer's choice wins; otherwise follow the system.
+  function stored() { try { return localStorage.getItem('theme'); } catch (e) { return null; } }
+  function current() {
+    var s = stored();
+    if (s === 'light' || s === 'dark') return s;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  // The terminals follow the page: a dark theme on dark, a light one on light.
+  function mount(theme) {
+    casts.forEach(function (c) {
+      var el = document.getElementById(c.id);
+      var at = 0;
+      if (players[c.id]) {
+        try { at = players[c.id].getCurrentTime() || 0; } catch (e) {}
+        players[c.id].dispose();
+      }
+      players[c.id] = AsciinemaPlayer.create(c.src, el, {
+        cols: c.cols, rows: c.rows, idleTimeLimit: c.idle, fit: 'width',
+        theme: theme === 'dark' ? 'monokai' : 'solarized-light',
+        poster: at > 0 ? 'npt:' + at : c.poster, terminalFontFamily: mono
+      });
+    });
+  }
+
+  function apply(theme, remember) {
+    root.setAttribute('data-theme', theme);
+    button.textContent = theme === 'dark' ? '☀ Light mode' : '☾ Dark mode';
+    if (remember) { try { localStorage.setItem('theme', theme); } catch (e) {} }
+    mount(theme);
+  }
+
+  button.addEventListener('click', function () {
+    apply(current() === 'dark' ? 'light' : 'dark', true);
   });
-  AsciinemaPlayer.create('kubernetes.cast', document.getElementById('kubernetes-player'), {
-    cols: 155, rows: 42, idleTimeLimit: 3, theme: 'monokai', fit: 'width',
-    poster: 'npt:646', terminalFontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  // Follow a system change only while the viewer has not chosen.
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+    if (!stored()) apply(current(), false);
   });
+
+  apply(current(), false);
+})();
 </script>
 </body>
 </html>
