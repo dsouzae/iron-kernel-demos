@@ -1,0 +1,3 @@
+# nothing to build here; keep editor and OS droppings out
+*.swp
+.DS_Store
