@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iron-kernel demos</title>
+<meta name="description" content="Recordings of iron-kernel, an OS kernel written from scratch in Rust that runs unmodified Linux binaries, up to a real Kubernetes node.">
+<link rel="stylesheet" href="asciinema-player.css">
+<style>
+  :root { color-scheme: light dark; --fg: #1f2328; --muted: #59636e; --bg: #ffffff; --line: #d1d9e0; --accent: #0969da; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --line: #30363d; --accent: #58a6ff; } }
+  html { background: var(--bg); color: var(--fg); }
+  body { margin: 0 auto; max-width: 1120px; padding: 24px 16px 64px; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 40px 0 8px; padding-top: 24px; border-top: 1px solid var(--line); }
+  p { margin: 8px 0; max-width: 78ch; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  .player { margin: 16px 0 8px; }
+  .ap-wrapper { max-width: 100%; }
+  code { font: 0.92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  nav a + a { margin-left: 16px; }
+</style>
+</head>
+<body>
+<h1>iron-kernel demos</h1>
+<p class="muted">An OS kernel written from scratch in Rust that speaks the Linux ABI and runs
+unmodified Linux binaries. These are recordings of its serial console; the player is
+<a href="https://github.com/asciinema/asciinema-player">asciinema-player</a>, served from this
+repository, and the casts are the files in it.</p>
+<nav><a href="#tour">The 40-second tour</a><a href="#kubernetes">The Kubernetes capstone</a>
+<a href="https://github.com/dsouzae/iron-kernel-demos">Repository</a></nav>
+
+<h2 id="tour">The 40-second tour</h2>
+<p>The kernel boots a BusyBox initramfs under QEMU and a shell script runs live on its
+console: the Linux ABI, unmodified musl and Go binaries, processes and signals, an ext2 disk
+on virtio-blk that persists across boots, namespaces and a cgroup OOM kill, and its own TCP/IP
+stack serving HTTP to the host. Press play; the text is selectable.</p>
+<div class="player" id="tour-player"></div>
+<p class="muted">Recorded under QEMU TCG (no KVM) in a 4-vCPU container; idle gaps are capped at 2 s.
+<a href="tour.cast">tour.cast</a></p>
+
+<h2 id="kubernetes">The Kubernetes capstone</h2>
+<p>A real kube-apiserver and kube-scheduler place a Deployment (replicas=2) on a node whose
+kubelet and CRI-O run both pods; a real kube-proxy programs their ClusterIP Service into the
+kernel's own netfilter; 24 requests to the ClusterIP come back 200 OK through the kernel's
+DNAT, hairpin and conntrack datapath. Stock Debian 13 and upstream Kubernetes binaries; only
+the kernel is new.</p>
+<div class="player" id="kubernetes-player"></div>
+<p class="muted">Recorded on a KVM host running the control plane; the minutes the pods take to
+schedule are compressed by the 3 s idle cap. <a href="kubernetes.cast">kubernetes.cast</a></p>
+
+<script src="asciinema-player.min.js"></script>
+<script>
+  AsciinemaPlayer.create('tour.cast', document.getElementById('tour-player'), {
+    cols: 100, rows: 36, idleTimeLimit: 2, theme: 'monokai', fit: 'width',
+    poster: 'npt:41', terminalFontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  });
+  AsciinemaPlayer.create('kubernetes.cast', document.getElementById('kubernetes-player'), {
+    cols: 155, rows: 42, idleTimeLimit: 3, theme: 'monokai', fit: 'width',
+    poster: 'npt:646', terminalFontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  });
+</script>
+</body>
+</html>
