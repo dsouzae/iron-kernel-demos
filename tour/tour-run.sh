@@ -13,10 +13,17 @@
 # stack from outside the VM. It stops at `### DEMO COMPLETE ###` (or a halt /
 # panic), then kills QEMU.
 #
+# The kernel's boot log is ~60 lines of memory-map and driver chatter; until
+# the tour announces itself (`### TOUR ###`) only a handful of them are shown
+# (the banner, memory, the NIC, the disk, the root, init; the two disk lines
+# cut at their first parenthesis), so a recording opens on something a viewer
+# can read. DEMO_BOOTLOG=full shows all of it.
+#
 # Tunables (environment): ISO (default build/kernel.iso), DATA_IMG
 # (build/demo-data.img), QEMU, QEMU_MEM (1024M), DEMO_HTTP_PORT (8080),
 # DEMO_TIMEOUT (seconds of console silence before giving up; 900), DEMO_ACCEL
-# ("kvm" / "tcg"; auto-detected).
+# ("kvm" / "tcg"; auto-detected), DEMO_BOOTLOG ("brief" / "full"),
+# DEMO_LINE_DELAY (seconds per relayed line; 0.04).
 #
 # Record it:  asciinema rec -c demo/tour-run.sh demo/tour.cast   (make demo-cast)
 set -u
@@ -51,7 +58,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "tour-run: $(basename "$QEMU") ($ACCEL), -m $MEM, /data = ${DATA_IMG#"$ROOT"/}, host 127.0.0.1:$PORT -> guest :80"
+echo "booting iron-kernel under $(basename "$QEMU") ($ACCEL, -m $MEM; host :$PORT -> guest :80)"
 echo
 
 # The guest's serial console is QEMU's stdout (-serial stdio; stdin is
@@ -81,18 +88,34 @@ fetch() {
 }
 
 rc=1
+booting=1
+[ "${DEMO_BOOTLOG:-brief}" = full ] && booting=0
+# The guest writes to the serial port in bursts, so without pacing a
+# recording shows whole blocks popping in; a short pause per line makes the
+# output stream the way a terminal would. DEMO_LINE_DELAY=0 turns it off.
+delay=${DEMO_LINE_DELAY:-0.04}
 while IFS= read -r -t "$TIMEOUT" line <&3; do
     line=${line%$'\r'}
     case "$line" in
         *"[syscall] unhandled"*|*"[hb"*) continue ;;
+        *"### TOUR ###"*) booting=0; continue ;;
     esac
+    if [ "$booting" = 1 ]; then
+        case "$line" in
+            "  iron-kernel v"*|"Physical memory:"*|"Heap initialized:"*|"virtio-net: MAC"*|\
+            "TCP/IP:"*|"Hardware initialized."|"root:"*|"Init process created"*)
+                printf '%s\n' "$line" ;;
+            "virtio-blk: device"*|"datadisk:"*) printf '%s\n' "${line%%(*}" ;;
+        esac
+        continue
+    fi
     printf '%s\n' "$line"
+    [ "$delay" != 0 ] && sleep "$delay"
     case "$line" in
         *"### HTTPD READY ###"*)
             echo
-            echo "  host\$ curl -i http://127.0.0.1:$PORT/     # QEMU forwards this to the guest's :80"
+            echo "  host\$ curl -i http://127.0.0.1:$PORT/"
             fetch | sed 's/^/  /' | tr -d '\r'
-            echo
             ;;
         *"### DEMO COMPLETE ###"*) rc=0; break ;;
         *"KERNEL PANIC"*|*"Halting."*) break ;;
